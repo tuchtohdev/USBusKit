@@ -5,6 +5,8 @@
 #include <linux/usb.h>
 // #include <usb.h>
 
+#include "usbuskit_usb_ids.h"
+
 
 static int usbuskit_probe(struct usb_interface *interface,
                           const struct usb_device_id *id)
@@ -19,8 +21,7 @@ static void usbuskit_disconnect(struct usb_interface *interface)
 }
 
 static const struct usb_device_id usbuskit_id_table[] = {
-    // { USB_DEVICE(0x1234, 0x5678)},
-    { USB_DEVICE(0x3654, 0x5678)},
+    { USB_DEVICE(USBUSKIT_USB_VID, USBUSKIT_USB_PID)},
     { }
 };
 

@@ -1,0 +1,9 @@
+[submodule "supported_mcus/BluePill/dependencies/CMSIS_6"]
+	path = supported_mcus/BluePill/dependencies/CMSIS_6
+	url = https://github.com/ARM-software/CMSIS_6.git
+[submodule "supported_mcus/BluePill/dependencies/cmsis-device-f1"]
+	path = supported_mcus/BluePill/dependencies/cmsis-device-f1
+	url = https://github.com/STMicroelectronics/cmsis-device-f1.git
+[submodule "supported_mcus/BluePill/dependencies/tinyusb"]
+	path = supported_mcus/BluePill/dependencies/tinyusb
+	url = https://github.com/hathach/tinyusb.git
