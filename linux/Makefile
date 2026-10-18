@@ -1,6 +1,6 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 BUILD_DIR := $(CURDIR)/build
-INCLUDE_DIR := $(abspath $(CURDIR)/include)
+INCLUDE_DIR := $(abspath $(CURDIR)/../include)
 
 .PHONY: all clean
 
