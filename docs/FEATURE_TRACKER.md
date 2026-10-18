@@ -18,9 +18,9 @@
 - [x] Enumerate a vendor-specific USB interface (`0xCAFE:0x4001`, development IDs).
 - [x] Configure bulk OUT `0x01` and bulk IN `0x81` (64-byte max packets).
 - [x] Verify bidirectional bulk echo using PyUSB.
-- [ ] Implement firmware-side peripheral discovery.
+- [ ] Implement firmware-side peripheral capabilities.
 - [ ] Implement peripheral configuration commands.
-- [ ] Add a nonblocking MCU log ring buffer.
+- [ ] Add MCU logging ability.
 
 ## 2. USBusKit bulk protocol
 
@@ -130,6 +130,48 @@ usbuskit logs
 4. **Linux integration:** Register one `i2c_adapter` and connect `master_xfer()` to USB.
 5. **Robustness:** Test NACK, timeout, disconnect, and bus recovery.
 6. **Expansion:** Add more peripherals and optional diagnostics.
+
+---
+
+### USB VID/PID Licensing and Allocation
+
+**Priority:** Medium
+**Status:** Pending 
+**Target:** Before public firmware/hardware distribution
+
+#### Current Development Setup
+- [x] Use temporary VID/PID (`0xCAFE:0x4001`) for local development.
+- [x] Make VID/PID configurable through CMake.
+- [ ] Document that development identifiers are not officially allocated to USBusKit.
+
+#### Investigate VID/PID Allocation Options
+- [ ] Investigate the OpenMoko USB PID allocation program (`VID 0x1D50`).
+- [ ] Investigate the pid.codes open-source PID registry.
+- [ ] Investigate STMicroelectronics' USB PID sublicensing program (`VID 0x0483`).
+- [ ] Contact ST support or an authorized distributor to confirm eligibility.
+- [ ] Verify whether ST sublicensing is free for open-source projects.
+- [ ] Confirm whether ST's PID can be used on third-party Bluepill boards.
+- [ ] Review USB-IF requirements for VID/PID allocation.
+
+#### Multi-MCU Compatibility
+- [ ] Determine whether one VID/PID can be used across different MCU families.
+- [ ] Verify licensing restrictions for STM32, ESP32-S3, and other supported MCUs.
+- [ ] Evaluate using a single USBusKit identity with runtime capability reporting.
+- [ ] Decide whether different hardware implementations require separate PIDs.
+
+#### Implementation
+- [ ] Select a long-term VID/PID allocation strategy.
+- [ ] Apply for an authorized PID?
+- [ ] Update USB descriptors with the allocated VID/PID.
+- [ ] Update Linux USB driver matching.
+- [ ] Document VID/PID licensing and usage restrictions.
+
+#### References
+- [OpenMoko USB PID Registry](https://github.com/openmoko/openmoko-usb-oui)
+- [pid.codes — Open-source USB PID Registry](https://pid.codes/)
+- [Raspberry Pi USB PID Allocation](https://github.com/raspberrypi/usb-pid)
+- [STMicroelectronics — STM32F103 USB PID Discussion](https://community.st.com/stm32-mcus-embedded-software-32/dear-sir-do-i-need-a-sub-license-for-the-usb-hid-product-based-on-stm32f103-or-is-there-any-generic-pid-that-i-can-use-thanks-26218)
+- [USB-IF — Obtaining a Vendor ID](https://www.usb.org/getting-vendor-id)
 
 ---
 
