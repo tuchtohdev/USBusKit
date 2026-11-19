@@ -74,6 +74,7 @@ set(TINYUSB_SOURCES
 add_executable(USBusKit.elf
     main.c
     usb_descriptors.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../protocol/src/usbuskit_protocol.c
 
     ${STM32_STARTUP}
     ${STM32_SYSTEM}
@@ -87,6 +88,7 @@ add_executable(USBusKit.elf
 
 target_include_directories(USBusKit.elf PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../protocol/include/ 
     ${CMSIS_CORE}
     ${STM32_CMSIS}
     ${TINYUSB_DIR}
