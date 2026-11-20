@@ -120,6 +120,13 @@ static void i2c_init(void)
 
 #define I2C_POLL_TIMEOUT 100000U
 
+struct usbuskit_i2c_message {
+    uint16_t address;
+    bool read;
+    uint16_t length;
+    const uint8_t *write_data;
+};
+
 static uint8_t i2c_wait_for_flag(uint32_t flag, bool address_phase)
 {
     uint32_t timeout = I2C_POLL_TIMEOUT;
@@ -152,76 +159,119 @@ static uint8_t i2c_wait_for_flag(uint32_t flag, bool address_phase)
     return USBUSKIT_I2C_STATUS_TIMEOUT;
 }
 
-static uint8_t i2c_write(uint8_t address,
-                         const uint8_t *data,
-                         uint16_t length)
+static uint8_t i2c_write_data(const uint8_t *data, uint16_t length)
 {
     uint8_t status;
-    uint32_t timeout = I2C_POLL_TIMEOUT;
-    volatile uint32_t dummy;
 
-    /* Validate the slave address and data pointer. */
-    if (address > 0x7F || (length > 0 && data == NULL))
-        return USBUSKIT_I2C_STATUS_INVALID_REQUEST;
-
-    /* Wait until the bus becomes available. */
-    while (I2C1->SR2 & I2C_SR2_BUSY)
-    {
-        if (--timeout == 0)
-            return USBUSKIT_I2C_STATUS_BUS_BUSY;
-    }
-
-    /* Generate START condition. */
-    I2C1->CR1 |= I2C_CR1_START;
-
-    status = i2c_wait_for_flag(I2C_SR1_SB, true);
-    if (status != USBUSKIT_I2C_STATUS_SUCCESS)
-        goto error;
-
-    /* Transmit the 7-bit slave address with the WRITE bit. */
-    I2C1->DR = (uint8_t)(address << 1);
-
-    status = i2c_wait_for_flag(I2C_SR1_ADDR, true);
-    if (status != USBUSKIT_I2C_STATUS_SUCCESS)
-        goto error;
-
-    /* Clear ADDR by reading SR1 followed by SR2. */
-    dummy = I2C1->SR1;
-    dummy = I2C1->SR2;
-    (void)dummy;
-
-    /* Transmit each data byte. */
-    for (uint16_t i = 0; i < length; i++)
+    // Transmit each data byte
+    for (uint8_t i = 0; i < length; i++)
     {
         status = i2c_wait_for_flag(I2C_SR1_TXE, false);
         if (status != USBUSKIT_I2C_STATUS_SUCCESS)
-            goto error;
+            return status;
 
         I2C1->DR = data[i];
     }
 
-    /*
-     * Wait until the final byte has completed transmission.
-     * This also allows detection of a NACK on the final byte.
-     */
-    status = i2c_wait_for_flag(I2C_SR1_BTF, false);
+    return i2c_wait_for_flag(I2C_SR1_BTF, false);
+}
+
+static uint8_t i2c_start(bool repeated_start)
+{
+    uint32_t timeout = I2C_POLL_TIMEOUT;
+
+    /* Only the initial START requires an idle bus. */
+    if (!repeated_start)
+    {
+        while (I2C1->SR2 & I2C_SR2_BUSY)
+        {
+            if (--timeout == 0)
+                return USBUSKIT_I2C_STATUS_BUS_BUSY;
+        }
+    }
+
+    /* Generate START or repeated START. */
+    I2C1->CR1 |= I2C_CR1_START;
+
+    /* Wait until the START condition is generated. */
+    return i2c_wait_for_flag(I2C_SR1_SB, true);
+}
+
+static uint8_t i2c_send_address(uint8_t address, bool read)
+{
+    /* Validate the 7-bit slave address. */
+    if (address > 0x7F)
+        return USBUSKIT_I2C_STATUS_INVALID_REQUEST;
+
+    /* Transmit the address with the appropriate R/W bit. */
+    I2C1->DR = (uint8_t)((address << 1) | (read ? 1U : 0U));
+
+    /* Wait for address acknowledgement. */
+    return i2c_wait_for_flag(I2C_SR1_ADDR, true);
+}
+
+static void i2c_clear_addr(void)
+{
+    volatile uint32_t dummy;
+
+    /* Reading SR1 followed by SR2 clears ADDR. */
+    dummy = I2C1->SR1;
+    dummy = I2C1->SR2;
+    (void)dummy;
+}
+
+static uint8_t i2c_transfer(const struct usbuskit_i2c_message *msgs,
+                            uint8_t num_msgs)
+{
+    uint8_t status;
+
+    /* Validate the message array. */
+    if (msgs == NULL || num_msgs == 0)
+        return USBUSKIT_I2C_STATUS_INVALID_REQUEST;
+
+    /* Currently support only single-message, non-empty writes. */
+    if (num_msgs != 1 || msgs[0].read || msgs[0].length == 0)
+        return USBUSKIT_I2C_STATUS_UNSUPPORTED;
+
+    /* Validate address and data buffer. */
+    if (msgs[0].address > 0x7F || msgs[0].write_data == NULL)
+        return USBUSKIT_I2C_STATUS_INVALID_REQUEST;
+
+    /* Generate initial START. */
+    status = i2c_start(false);
+    if (status != USBUSKIT_I2C_STATUS_SUCCESS)
+    {
+        /* No STOP if the bus was already occupied. */
+        if (status == USBUSKIT_I2C_STATUS_BUS_BUSY)
+            return status;
+
+        goto error;
+    }
+
+    /* Send slave address in write mode. */
+    status = i2c_send_address((uint8_t)msgs[0].address, false);
     if (status != USBUSKIT_I2C_STATUS_SUCCESS)
         goto error;
 
-    /* Generate STOP after successful transmission. */
+    /* Clear ADDR before transmitting data. */
+    i2c_clear_addr();
+
+    /* Transmit message payload. */
+    status = i2c_write_data(msgs[0].write_data, msgs[0].length);
+    if (status != USBUSKIT_I2C_STATUS_SUCCESS)
+        goto error;
+
+    /* End the transaction. */
     I2C1->CR1 |= I2C_CR1_STOP;
 
     return USBUSKIT_I2C_STATUS_SUCCESS;
 
 error:
-    /*
-     * After arbitration loss, STM32 hardware releases the bus.
-     * We must not issue STOP because another controller owns it.
-     */
+    /* Another controller owns the bus after arbitration loss. */
     if (status != USBUSKIT_I2C_STATUS_ARBITRATION_LOST)
         I2C1->CR1 |= I2C_CR1_STOP;
 
-    /* Clear the hardware error flags. */
+    /* Clear hardware error flags. */
     I2C1->SR1 &= ~(I2C_SR1_AF |
                    I2C_SR1_BERR |
                    I2C_SR1_ARLO);
@@ -251,13 +301,6 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 {
     tud_int_handler(0);
 }
-
-struct usbuskit_i2c_message {
-    uint16_t address;
-    bool read;
-    uint16_t length;
-    const uint8_t *write_data;
-};
 
 static bool usbuskit_i2c_decode_request(
     const uint8_t *payload,
@@ -406,20 +449,8 @@ static void usbuskit_i2c_process_request(
     if (!usbuskit_i2c_validate_response_size(msgs, num_msgs))
         return;
 
-    /*
-     * Initial implementation:
-     * Only one I2C WRITE message is supported.
-     */
-    if (num_msgs != 1 || msgs[0].read || msgs[0].length < 1) {
-        status = USBUSKIT_I2C_STATUS_UNSUPPORTED;
-    } else {
-        /* Execute the physical I2C transaction. */
-        status = i2c_write(
-            msgs[0].address,
-            msgs[0].write_data,
-            msgs[0].length
-        );
-    }
+    /* Execute the decoded I2C transaction. */
+    status = i2c_transfer(msgs, num_msgs);
 
     /* Construct the USBusKit response containing the I2C result. */
     usbuskit_i2c_build_response(header, num_msgs, status);
